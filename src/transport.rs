@@ -42,11 +42,25 @@ impl IpcTransport {
     }
 }
 
+/// Requested `SO_RCVBUF`/`SO_SNDBUF` for the datagram socket. QUIC bursts many
+/// packets for a single co-located `put`; the default AF_UNIX receive buffer
+/// (~208 KiB) overflows mid-burst, backpressures the sender, and triggers
+/// QUIC PTO backoff (multi-second stalls). 8 MiB comfortably holds a
+/// page-sized burst. Best-effort: the kernel clamps to `net.core.rmem_max` /
+/// `wmem_max`, so on an untuned host this is capped — the batched `poll_recv`
+/// drain is the primary fix; this is defense in depth.
+const IPC_SOCKET_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+
 impl CustomTransport for IpcTransport {
     fn bind(&self) -> io::Result<Box<dyn CustomEndpoint>> {
         // A stale socket file from a previous run would make `bind` fail.
         let _ = std::fs::remove_file(&self.socket_path);
         let socket = UnixDatagram::bind(&self.socket_path)?;
+        // Best-effort buffer enlargement; a failure just leaves the OS default,
+        // so never fail `bind` over it.
+        let sock = socket2::SockRef::from(&socket);
+        let _ = sock.set_recv_buffer_size(IPC_SOCKET_BUFFER_BYTES);
+        let _ = sock.set_send_buffer_size(IPC_SOCKET_BUFFER_BYTES);
         Ok(Box::new(IpcEndpoint::new(socket, self.socket_path.clone())))
     }
 }

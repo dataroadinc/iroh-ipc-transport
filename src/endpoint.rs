@@ -62,28 +62,53 @@ impl CustomEndpoint for IpcEndpoint {
         metas: &mut [noq_udp::RecvMeta],
         recv_infos: &mut [RecvInfo],
     ) -> Poll<io::Result<usize>> {
-        if bufs.is_empty() {
+        // Drain as many queued datagrams as the caller's buffers allow in one
+        // poll. iroh hands us batched `bufs`/`metas`/`recv_infos` slices for
+        // exactly this — reading only the first (returning `Ok(1)`) throttles
+        // QUIC to one datagram per wakeup, which under a co-located `put` burst
+        // starves the receiver, backs the sender's `SOCK_DGRAM` queue up, and
+        // shows up as multi-second stalls. Fill the batch instead.
+        let cap = bufs.len().min(metas.len()).min(recv_infos.len());
+        if cap == 0 {
             return Poll::Ready(Ok(0));
         }
-        let mut read_buf = ReadBuf::new(&mut bufs[0]);
-        match self.socket.poll_recv_from(cx, &mut read_buf) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Ready(Ok(src)) => {
-                let len = read_buf.filled().len();
-                // The sender is bound to its own path; that path is its address.
-                // An unnamed sender (autobind) has no path — we can't route a
-                // reply, so drop it.
-                let Some(src_path) = src.as_pathname() else {
-                    return Poll::Pending;
-                };
-                recv_infos[0] =
-                    RecvInfo::new(ipc_custom_addr(src_path), Some(self.local_addr.clone()));
-                metas[0].len = len;
-                metas[0].stride = len;
-                Poll::Ready(Ok(1))
+        let mut n = 0;
+        while n < cap {
+            let mut read_buf = ReadBuf::new(&mut bufs[n]);
+            match self.socket.poll_recv_from(cx, &mut read_buf) {
+                // Queue drained. Return what we have; if we have nothing yet,
+                // stay Pending on the waker this poll just registered.
+                Poll::Pending => {
+                    if n == 0 {
+                        return Poll::Pending;
+                    }
+                    break;
+                }
+                Poll::Ready(Err(e)) => {
+                    if n == 0 {
+                        return Poll::Ready(Err(e));
+                    }
+                    break;
+                }
+                Poll::Ready(Ok(src)) => {
+                    let len = read_buf.filled().len();
+                    // The sender is bound to its own path; that path is its
+                    // address. An unnamed sender (autobind) has no path — we
+                    // can't route a reply, so skip it and keep draining (rather
+                    // than returning `Pending` after consuming a datagram, which
+                    // would drop the waker registration and stall the receiver).
+                    let Some(src_path) = src.as_pathname() else {
+                        continue;
+                    };
+                    recv_infos[n] =
+                        RecvInfo::new(ipc_custom_addr(src_path), Some(self.local_addr.clone()));
+                    metas[n].len = len;
+                    metas[n].stride = len;
+                    n += 1;
+                }
             }
         }
+        Poll::Ready(Ok(n))
     }
 }
 
