@@ -61,7 +61,7 @@ this path whenever a same-host candidate exists.
 
 **Work in progress / experimental.** Depends on iroh's
 `unstable-custom-transports` feature — experimental and may change between iroh
-releases. Not yet published.
+releases.
 
 Milestones:
 
