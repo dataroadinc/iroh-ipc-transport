@@ -68,7 +68,12 @@ async fn run_case(label: &str, dial_ip: Ipv4Addr) {
         vec![],
     )
     .await;
-    let ep_b = coexist_endpoint(secret_b, &dir.path().join("b.ipc.sock"), vec![ALPN.to_vec()]).await;
+    let ep_b = coexist_endpoint(
+        secret_b,
+        &dir.path().join("b.ipc.sock"),
+        vec![ALPN.to_vec()],
+    )
+    .await;
 
     let b_port = ipv4_port(&ep_b);
 
@@ -122,9 +127,7 @@ async fn run_case(label: &str, dial_ip: Ipv4Addr) {
     conn.close(0u32.into(), b"done");
     let _ = server.await;
 
-    eprintln!(
-        "[{label}] connect: {t_connect:?}   first rtt: {t_first:?}   8 MiB: {t_large:?}"
-    );
+    eprintln!("[{label}] connect: {t_connect:?}   first rtt: {t_first:?}   8 MiB: {t_large:?}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
