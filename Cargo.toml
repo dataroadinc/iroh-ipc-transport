@@ -1,0 +1,28 @@
+[package]
+name = "iroh-ipc-transport"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "Inter-process custom transport for iroh — co-located peers connect over a local IPC socket (Unix domain socket, or a message-mode named pipe on Windows) as a native iroh path, so QUIC multiplexes and authenticates over it with no relay"
+repository = "https://github.com/dataroadinc/iroh-ipc-transport"
+homepage = "https://github.com/dataroadinc/iroh-ipc-transport"
+keywords = ["iroh", "p2p", "transport", "ipc", "unix-socket"]
+categories = ["network-programming"]
+readme = "README.md"
+
+[dependencies]
+# The custom-transport API is gated behind iroh's `unstable-custom-transports`
+# feature — experimental and may shift between iroh releases; pinned tightly.
+iroh = { version = "1.0.0", features = ["unstable-custom-transports"] }
+iroh-base = "1.0"
+n0-watcher = "0.3"
+noq-udp = "1.0"
+tokio = { version = "1", features = ["net", "rt", "sync", "macros"] }
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["net", "rt-multi-thread", "macros", "time"] }
+tempfile = "3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+n0-future = "0.3"
