@@ -38,6 +38,20 @@
 
 #![deny(missing_docs)]
 
+#[cfg(unix)]
+mod addr;
+#[cfg(unix)]
+mod endpoint;
+mod selector;
+#[cfg(unix)]
+mod transport;
+
+#[cfg(unix)]
+pub use addr::{ipc_custom_addr, path_from_custom_addr};
+pub use selector::PreferIpcTransport;
+#[cfg(unix)]
+pub use transport::IpcTransport;
+
 /// iroh custom-transport type id for this local-IPC transport, mixed into
 /// every [`iroh_base::CustomAddr`] it produces so iroh routes only its own
 /// addresses to it.
